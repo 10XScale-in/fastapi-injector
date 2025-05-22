@@ -1,6 +1,6 @@
 # FastAPI Injector
 
-A powerful dependency injection integration for FastAPI and Taskiq applications, built on top of the Python [injector](https://github.com/alecthomas/injector) library.
+A powerful dependency injection integration for FastAPI and Taskiq applications, now featuring a self-contained dependency injection core designed for robustness and flexibility.
 
 ## Features
 
@@ -24,10 +24,16 @@ pip install git+https://github.com/10XScale-in/fastapi-injector.git
 ```python
 from fastapi import FastAPI, Body
 from fastapi_injector import attach_injector, Injected
-from injector import Injector
+from custom_injector.core import Injector # Updated import
+from custom_injector.scopes import SingletonScope # Added for example
 from typing import Annotated
+import abc # Added for UserRepository example
 
 # Define your interfaces and implementations
+# Example User class (add for context if needed)
+class User:
+    def __init__(self, name: str):
+        self.name = name
 class UserRepository(abc.ABC):
     @abc.abstractmethod
     async def save_user(self, user: User) -> None:
@@ -41,7 +47,8 @@ class PostgresUserRepository(UserRepository):
 # Create and configure your FastAPI application
 app = FastAPI()
 injector = Injector()
-injector.binder.bind(UserRepository, to=PostgresUserRepository)
+# injector.binder.bind(UserRepository, to=PostgresUserRepository) # Old way
+injector.bind(UserRepository, to_class=PostgresUserRepository, scope=SingletonScope) # New way
 attach_injector(app, injector)
 
 # Use injection in your routes
@@ -57,16 +64,38 @@ async def create_user(
 ### Taskiq Integration
 
 ```python
-from taskiq import TaskiqState, Context
+from taskiq import TaskiqState, Context # Assuming TaskiqBroker is defined elsewhere
 from fastapi_injector import attach_injector_taskiq, InjectedTaskiq
+from custom_injector.core import Injector # Updated import
+from custom_injector.scopes import SingletonScope # Added for example
+import abc # Added for UserRepository example
+
+# Example User class (add for context if needed)
+class User:
+    def __init__(self, name: str):
+        self.name = name
+
+# Define your interfaces and implementations (assuming from FastAPI example)
+class UserRepository(abc.ABC):
+    @abc.abstractmethod
+    async def save_user(self, user: User) -> None:
+        pass
+
+class PostgresUserRepository(UserRepository):
+    async def save_user(self, user: User) -> None:
+        # Implementation details
+        print(f"Saving user {user.name} to Postgres")
+        pass
+
 
 # Initialize Taskiq broker and state
-broker = TaskiqBroker()
+# broker = TaskiqBroker() # Assuming broker is defined
 state = TaskiqState()
 
 # Configure injection
 injector = Injector()
-injector.binder.bind(UserRepository, to=PostgresUserRepository)
+# injector.binder.bind(UserRepository, to=PostgresUserRepository) # Old way
+injector.bind(UserRepository, to_class=PostgresUserRepository, scope=SingletonScope) # New way
 attach_injector_taskiq(state, injector)
 
 # Use injection in your tasks
@@ -84,15 +113,38 @@ async def process_user(
 Enable request-scoped dependencies for better resource management:
 
 ```python
-from fastapi_injector import InjectorMiddleware, request_scope, RequestScopeOptions
+from fastapi_injector import InjectorMiddleware, RequestScope, RequestScopeOptions # Updated import
+from custom_injector.core import Injector # Ensure Injector is imported if used in a standalone example
+# Assuming app and injector are already defined as in Quick Start
+# from custom_injector.scopes import SingletonScope # Not needed if RequestScope is the focus
+
+# Example Connection classes (add for context)
+class DatabaseConnection:
+    def query(self, sql: str):
+        print(f"Executing query: {sql} with {self}")
+        return "some_data"
+
+class PostgresConnection(DatabaseConnection):
+    def __init__(self):
+        print(f"PostgresConnection {id(self)} created")
+    # Add __enter__ and __exit__ if enable_cleanup=True has effect
+    def __enter__(self):
+        print(f"PostgresConnection {id(self)} entered")
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print(f"PostgresConnection {id(self)} exited")
+
 
 # Configure request scope
+# app = FastAPI() # Assuming app is defined
+# injector = Injector() # Assuming injector is defined
 options = RequestScopeOptions(enable_cleanup=True)
-app.add_middleware(InjectorMiddleware, injector=injector)
-attach_injector(app, injector, options)
+app.add_middleware(InjectorMiddleware, injector=injector) # This should be before attach_injector if RequestScope itself is bound by attach_injector
+attach_injector(app, injector, options) # attach_injector also binds RequestScope, RequestScopeFactory and RequestScopeOptions
 
 # Bind with request scope
-injector.binder.bind(DatabaseConnection, to=PostgresConnection, scope=request_scope)
+# injector.binder.bind(DatabaseConnection, to=PostgresConnection, scope=request_scope) # Old way
+injector.bind(DatabaseConnection, to_class=PostgresConnection, scope=RequestScope) # New way
 ```
 
 ## Synchronous Dependencies
@@ -125,8 +177,15 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def test_app():
+    from custom_injector.core import Injector # Updated import
+    from custom_injector.scopes import SingletonScope # Added for example
+    # Assuming UserRepository and MockUserRepository are defined
+    # class UserRepository(abc.ABC): ...
+    # class MockUserRepository(UserRepository): ...
+
     injector = Injector()
-    injector.binder.bind(UserRepository, to=MockUserRepository)
+    # injector.binder.bind(UserRepository, to=MockUserRepository) # Old way
+    injector.bind(UserRepository, to_class=MockUserRepository, scope=SingletonScope) # New way
     app = FastAPI()
     attach_injector(app, injector)
     return app

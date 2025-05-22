@@ -6,7 +6,9 @@ import pytest
 from fastapi import APIRouter, Depends, FastAPI, Response, status
 from fastapi.testclient import TestClient
 from fastapi.websockets import WebSocket
-from injector import Injector, Module, provider
+# from injector import Injector, Module, provider # Old import
+from custom_injector.core import Injector # New import
+# from custom_injector.scopes import SingletonScope # Not strictly needed for these factories yet
 
 from fastapi_injector import (
     Injected,
@@ -19,20 +21,26 @@ from fastapi_injector import (
 BIND_INT_TO: int = 1
 
 
-class MyModule(Module):
-    @provider
-    def is_main_thread(self) -> bool:
-        return threading.current_thread() is threading.main_thread()
-
-    @provider
-    def event_loop(self) -> asyncio.AbstractEventLoop:
-        return asyncio.get_event_loop()
+# class MyModule(Module): # Removed
+#     @provider
+#     def is_main_thread(self) -> bool:
+#         return threading.current_thread() is threading.main_thread()
+# 
+#     @provider
+#     def event_loop(self) -> asyncio.AbstractEventLoop:
+#         return asyncio.get_event_loop()
 
 
 @pytest.fixture
 def app() -> FastAPI:
-    inj = Injector(MyModule())
-    inj.binder.bind(int, to=BIND_INT_TO)
+    inj = Injector() # Removed MyModule
+    # inj.binder.bind(int, to=BIND_INT_TO) # Old way
+    inj.bind(int, to_value=BIND_INT_TO) # New way
+    
+    # Add bindings for bool and asyncio.AbstractEventLoop
+    inj.bind(bool, to_factory=lambda: threading.current_thread() is threading.main_thread())
+    inj.bind(asyncio.AbstractEventLoop, to_factory=asyncio.get_event_loop)
+    
     app = FastAPI()
     attach_injector(app, inj)
     return app

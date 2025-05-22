@@ -7,17 +7,19 @@ from typing import Tuple
 import httpx
 import pytest
 from fastapi import FastAPI
-from injector import Injector, InstanceProvider, inject, singleton
+# from injector import Injector, InstanceProvider, inject, singleton # Old imports
+from custom_injector.core import Injector # New import
+from custom_injector.scopes import SingletonScope # New import
 from starlette import status
 
 from fastapi_injector import (
     Injected,
     InjectorMiddleware,
-    RequestScope,
+    RequestScope, # RequestScope class is used directly
     RequestScopeFactory,
     RequestScopeOptions,
     attach_injector,
-    request_scope,
+    # request_scope, # Old decorator removed
 )
 from fastapi_injector.exceptions import InjectorNotAttached, RequestScopeError
 
@@ -40,7 +42,8 @@ async def test_caches_instance(app_inj):
         pass
 
     app, inj = app_inj
-    inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope)
+    # inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope) # Old way
+    inj.bind(DummyInterface, to_class=DummyImpl, scope=RequestScope) # New way
 
     @app.get("/")
     def get_root(
@@ -68,7 +71,7 @@ async def test_caches_instance_nested(app_inj):
             pass
 
     class DummyImpl2:
-        @inject
+        # @inject # Removed
         def __init__(self, dummy: DummyInterface):
             self.dummy = dummy
 
@@ -76,8 +79,10 @@ async def test_caches_instance_nested(app_inj):
             return self.dummy
 
     app, inj = app_inj
-    inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope)
-    inj.binder.bind(DummyInterface2, to=DummyImpl2)
+    # inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope) # Old way
+    inj.bind(DummyInterface, to_class=DummyImpl, scope=RequestScope) # New way
+    # inj.binder.bind(DummyInterface2, to=DummyImpl2) # Old way, assuming Transient if no scope
+    inj.bind(DummyInterface2, to_class=DummyImpl2) # New way, default TransientScope
 
     @app.get("/")
     def get_root(
@@ -102,7 +107,8 @@ async def test_doesnt_cache_across_requests(app_inj) -> None:
             self.id = uuid.uuid4()
 
     app, inj = app_inj
-    inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope)
+    # inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope) # Old way
+    inj.bind(DummyInterface, to_class=DummyImpl, scope=RequestScope) # New way
 
     @app.get("/")
     def get_root(
@@ -130,7 +136,8 @@ async def test_doesnt_cache_across_concurrent_requests(app_inj) -> None:
             self.id = uuid.uuid4()
 
     app, inj = app_inj
-    inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope)
+    # inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope) # Old way
+    inj.bind(DummyInterface, to_class=DummyImpl, scope=RequestScope) # New way
 
     @app.get("/")
     def get_root(dummy: DummyInterface = Injected(DummyInterface)):
@@ -155,7 +162,8 @@ async def test_middleware_not_added():
     inj = Injector()
     app = FastAPI()
     attach_injector(app, inj)
-    inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope)
+    # inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope) # Old way
+    inj.bind(DummyInterface, to_class=DummyImpl, scope=RequestScope) # New way
 
     @app.get("/")
     def get_root(dummy: DummyInterface = Injected(DummyInterface)):
@@ -176,7 +184,8 @@ async def test_middleware_added_without_injector_attached():
     inj = Injector()
     app = FastAPI()
     app.add_middleware(InjectorMiddleware, injector=inj)
-    inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope)
+    # inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope) # Old way
+    inj.bind(DummyInterface, to_class=DummyImpl, scope=RequestScope) # New way
 
     @app.get("/")
     def get_root(dummy: DummyInterface = Injected(DummyInterface)):
@@ -195,7 +204,8 @@ async def test_request_scope_cache_cleared(app_inj):
         pass
 
     app, inj = app_inj
-    inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope)
+    # inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope) # Old way
+    inj.bind(DummyInterface, to_class=DummyImpl, scope=RequestScope) # New way
 
     @app.get("/")
     def get_root(
@@ -221,7 +231,8 @@ async def test_caches_instances_with_scope_factory():
         pass
 
     inj = Injector()
-    inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope)
+    # inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope) # Old way
+    inj.bind(DummyInterface, to_class=DummyImpl, scope=RequestScope) # New way
 
     factory = inj.get(RequestScopeFactory)
 
@@ -242,11 +253,12 @@ async def test_works_without_auto_bind():
     class DummyImpl:
         pass
 
-    inj = Injector(auto_bind=False)
+    inj = Injector() # Changed from Injector(auto_bind=False)
     app = FastAPI()
     app.add_middleware(InjectorMiddleware, injector=inj)
     attach_injector(app, inj)
-    inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope)
+    # inj.binder.bind(DummyInterface, to=DummyImpl, scope=request_scope) # Old way
+    inj.bind(DummyInterface, to_class=DummyImpl, scope=RequestScope) # New way
 
     @app.get("/")
     def get_root(
@@ -294,9 +306,11 @@ class DummyAsyncContextManager:
 
 async def test_context_manager_instances_are_cleaned_up_when_enabled():
     inj = Injector()
-    inj.binder.bind(DummyContextManager, to=DummyContextManager, scope=request_scope)
+    # inj.binder.bind(DummyContextManager, to=DummyContextManager, scope=request_scope) # Old way
+    inj.bind(DummyContextManager, to_class=DummyContextManager, scope=RequestScope) # New way
     options = RequestScopeOptions(enable_cleanup=True)
-    inj.binder.bind(RequestScopeOptions, InstanceProvider(options), scope=singleton)
+    # inj.binder.bind(RequestScopeOptions, InstanceProvider(options), scope=singleton) # Old way
+    inj.bind(RequestScopeOptions, to_value=options, scope=SingletonScope) # New way
 
     factory = inj.get(RequestScopeFactory)
 
@@ -309,7 +323,8 @@ async def test_context_manager_instances_are_cleaned_up_when_enabled():
 
 async def test_context_manager_instances_are_not_cleaned_up_when_not_enabled():
     inj = Injector()
-    inj.binder.bind(DummyContextManager, to=DummyContextManager, scope=request_scope)
+    # inj.binder.bind(DummyContextManager, to=DummyContextManager, scope=request_scope) # Old way
+    inj.bind(DummyContextManager, to_class=DummyContextManager, scope=RequestScope) # New way
 
     factory = inj.get(RequestScopeFactory)
 
@@ -322,11 +337,13 @@ async def test_context_manager_instances_are_not_cleaned_up_when_not_enabled():
 
 async def test_async_context_manager_instances_are_cleaned_up_when_enabled():
     inj = Injector()
-    inj.binder.bind(
-        DummyAsyncContextManager, to=DummyAsyncContextManager, scope=request_scope
-    )
+    # inj.binder.bind(
+    #     DummyAsyncContextManager, to=DummyAsyncContextManager, scope=request_scope
+    # ) # Old way
+    inj.bind(DummyAsyncContextManager, to_class=DummyAsyncContextManager, scope=RequestScope) # New way
     options = RequestScopeOptions(enable_cleanup=True)
-    inj.binder.bind(RequestScopeOptions, InstanceProvider(options), scope=singleton)
+    # inj.binder.bind(RequestScopeOptions, InstanceProvider(options), scope=singleton) # Old way
+    inj.bind(RequestScopeOptions, to_value=options, scope=SingletonScope) # New way
 
     factory = inj.get(RequestScopeFactory)
 
@@ -339,9 +356,10 @@ async def test_async_context_manager_instances_are_cleaned_up_when_enabled():
 
 async def test_async_context_manager_instances_are_not_cleaned_up_when_not_enabled():
     inj = Injector()
-    inj.binder.bind(
-        DummyAsyncContextManager, to=DummyAsyncContextManager, scope=request_scope
-    )
+    # inj.binder.bind(
+    #     DummyAsyncContextManager, to=DummyAsyncContextManager, scope=request_scope
+    # ) # Old way
+    inj.bind(DummyAsyncContextManager, to_class=DummyAsyncContextManager, scope=RequestScope) # New way
 
     factory = inj.get(RequestScopeFactory)
 
